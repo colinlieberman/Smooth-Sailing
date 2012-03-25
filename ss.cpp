@@ -20,14 +20,24 @@
 XPLMDataRef ref_xpndr_mode      = NULL;
 XPLMDataRef ref_xpndr_setting   = NULL;
 XPLMDataRef ref_alt_agl         = NULL;
+XPLMDataRef ref_alt_msl         = NULL;
 XPLMDataRef ref_grnd_spd        = NULL;
 XPLMDataRef ref_visibility      = NULL;
+
+XPLMDataRef ref_cloud_base0     = NULL;
+XPLMDataRef ref_cloud_base1     = NULL;
+XPLMDataRef ref_cloud_base2     = NULL;
+
+XPLMDataRef ref_cloud_tops0     = NULL;
+XPLMDataRef ref_cloud_tops1     = NULL;
+XPLMDataRef ref_cloud_tops2     = NULL;
 
 XPLMWindowID	debug_window = NULL;
 int				clicked = 0;
 
 int config_default_xpndr_setting;
 float config_visibility_setting;
+float config_min_cloud_base;
 
 char debug_string[255];
 
@@ -53,9 +63,14 @@ int MyHandleMouseClickCallback(
 
 void initConfig() {
     /* TODO: make this a config file */
+    
     config_default_xpndr_setting = 1200;
+    
     /* in meters - 40km =~ 25 sm */ 
     config_visibility_setting    = 40000;
+
+    /* in meters - 650m =~ 2100k ft */
+    config_min_cloud_base = 650;
 }
 
 float SmoothSailingCallback(
@@ -66,8 +81,31 @@ float SmoothSailingCallback(
 
     initXpndr();
     setVisibility();
+    setCloudBase();
 
     return CALLBACK_INTERVAL;
+}
+
+void setCloudBase() {
+    
+    float cloud_base_msl = XPLMGetDataf( ref_cloud_base0 );
+    float ground_level   = XPLMGetDataf( ref_alt_msl ) - XPLMGetDataf( ref_alt_agl );
+    float cloud_base_agl = cloud_base_msl - ground_level;
+
+    /* find the difference betwee the lowest cloud layer and what we want, 
+     * then apply that difference to all cloud layers */
+    float delta = config_min_cloud_base - cloud_base_agl;
+
+    if( delta > 0 ) {
+        XPLMSetDataf( ref_cloud_base0, cloud_base_msl + delta );
+        XPLMSetDataf( ref_cloud_tops0, XPLMGetDataf( ref_cloud_tops0 ) + delta );
+        
+        XPLMSetDataf( ref_cloud_base1, XPLMGetDataf( ref_cloud_base1 ) + delta );
+        XPLMSetDataf( ref_cloud_tops1, XPLMGetDataf( ref_cloud_tops1 ) + delta );
+        
+        XPLMSetDataf( ref_cloud_base2, XPLMGetDataf( ref_cloud_base2 ) + delta );
+        XPLMSetDataf( ref_cloud_tops2, XPLMGetDataf( ref_cloud_tops2 ) + delta );
+    }
 }
 
 void setVisibility() {
@@ -107,6 +145,17 @@ PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc) {
 
     /* data ref for visibility */
     ref_visibility      = XPLMFindDataRef("sim/weather/visibility_reported_m");
+
+    /* data ref for cloud base */
+    ref_cloud_base0     = XPLMFindDataRef("sim/weather/cloud_base_msl_m[0]");
+    ref_cloud_base1     = XPLMFindDataRef("sim/weather/cloud_base_msl_m[1]");
+    ref_cloud_base2     = XPLMFindDataRef("sim/weather/cloud_base_msl_m[2]");
+    
+    ref_cloud_tops0     = XPLMFindDataRef("sim/weather/cloud_tops_msl_m[0]");
+    ref_cloud_tops1     = XPLMFindDataRef("sim/weather/cloud_tops_msl_m[1]");
+    ref_cloud_tops2     = XPLMFindDataRef("sim/weather/cloud_tops_msl_m[2]");
+    
+    ref_alt_msl         = XPLMFindDataRef("sim/flightmodel/position/elevation");
 
     // * Register our callback for every loop. Positive intervals
     // * are in seconds, negative are the negative of sim frames.  Zero
