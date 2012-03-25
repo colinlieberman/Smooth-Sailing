@@ -1,6 +1,6 @@
 Smooth Sailing plugin for X-Plane 9
 
-This project is an X-plane plugin by <a href="http://www.cactusflower.org">Colin Lieberman</a> for making some convenient changes to time and weather.
+This project is an X-plane plugin by [Colin Lieberman](http://www.cactusflower.org) for making some convenient changes to time and weather.
 
 It's inspired by, and similar to, these two excellent projects:
 

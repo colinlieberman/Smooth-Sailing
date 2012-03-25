@@ -3,10 +3,20 @@ CXX         = g++
 INCPATH     = -I../xsdk/CHeaders/XPLM -I../xsdk/CHeaders/Wrappers -I../xsdk/CHeaders/Widgets -I.
 DEFINES     = -DXPLM200 -DAPL=1 -DIBM=0 -DLIN=0
 CXXFLAGS    = -pipe -Os -arch i386 -Wall -W -fPIC $(DEFINES)
-OBJECT      = smoothsailing.mac.xpl
+TARGET      = mac.xpl
+OBJECTS     = ss.o
+XP_PATH     = /Applications/X-Plane
+PLUGIN_PATH = $(XP_PATH)/Resources/plugins
+PKG_NAME    = SmoothSailing
+LINK        = g++
+LFLAGS      = -headerpad_max_install_names -flat_namespace -undefined suppress -arch i386 -bundle -flat_namespace
 
 smoothsailing: ss.cpp ss.h
-	$(CXX) -c $(CXXFLAGS) -o $(OBJECT) ss.cpp $(INCPATH)
+	$(CXX) -c $(CXXFLAGS) -o ss.o ss.cpp $(INCPATH)
+	$(LINK) $(LFLAGS) -o $(TARGET) $(OBJECTS)
 
 clean: 
-	rm $(OBJECT)
+	rm -dfr $(PKG_NAME); rm $(TARGET); rm $(OBJECTS)
+
+install:
+	mkdir $(PKG_NAME); cp $(TARGET) $(PKG_NAME)/; cp -R $(PKG_NAME) $(PLUGIN_PATH)/ 
