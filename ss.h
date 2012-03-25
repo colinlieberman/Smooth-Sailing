@@ -10,3 +10,4 @@
 
 void initXpndr( void );
 void initConfig( void );
+void setVisibility( void );

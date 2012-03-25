@@ -21,11 +21,13 @@ XPLMDataRef ref_xpndr_mode      = NULL;
 XPLMDataRef ref_xpndr_setting   = NULL;
 XPLMDataRef ref_alt_agl         = NULL;
 XPLMDataRef ref_grnd_spd        = NULL;
+XPLMDataRef ref_visibility      = NULL;
 
 XPLMWindowID	debug_window = NULL;
 int				clicked = 0;
 
 int config_default_xpndr_setting;
+float config_visibility_setting;
 
 char debug_string[255];
 
@@ -52,6 +54,8 @@ int MyHandleMouseClickCallback(
 void initConfig() {
     /* TODO: make this a config file */
     config_default_xpndr_setting = 1200;
+    /* in meters - 40km =~ 25 sm */ 
+    config_visibility_setting    = 40000;
 }
 
 float SmoothSailingCallback(
@@ -61,8 +65,13 @@ float SmoothSailingCallback(
         void    *inRefcon) {
 
     initXpndr();
+    setVisibility();
 
     return CALLBACK_INTERVAL;
+}
+
+void setVisibility() {
+    XPLMSetDataf( ref_visibility, config_visibility_setting );
 }
 
 void initXpndr() {
@@ -90,10 +99,14 @@ PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc) {
 
     initConfig();
 
+    /* data refs used for the transponder setting & checks to determine if i want to set it */
     ref_xpndr_mode      = XPLMFindDataRef("sim/cockpit/radios/transponder_mode");
     ref_xpndr_setting   = XPLMFindDataRef("sim/cockpit/radios/transponder_code");
     ref_alt_agl         = XPLMFindDataRef("sim/flightmodel/position/y_agl");
     ref_grnd_spd        = XPLMFindDataRef("sim/flightmodel/position/groundspeed");
+
+    /* data ref for visibility */
+    ref_visibility      = XPLMFindDataRef("sim/weather/visibility_reported_m");
 
     // * Register our callback for every loop. Positive intervals
     // * are in seconds, negative are the negative of sim frames.  Zero
