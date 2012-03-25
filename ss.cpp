@@ -68,14 +68,14 @@ float SmoothSailingCallback(
 void initXpndr() {
     /* if the plane is stationary and altitude agl is 0, and the xpndr is off, turn it on */
     int xpndr_mode;
-    float alt_agl, grnd_spd;
 
     xpndr_mode  = XPLMGetDatai( ref_xpndr_mode );
-    alt_agl     = XPLMGetDataf( ref_alt_agl );
-    grnd_spd    = XPLMGetDataf( ref_grnd_spd );
 
     /* Transponder mode (off=0 stdby=1 on=2 test=3) */
-    if( !xpndr_mode && !floor(alt_agl) && !floor(grnd_spd) ) {
+    if(     !xpndr_mode 
+            && !floor( XPLMGetDataf( ref_alt_agl ) ) 
+            && !floor( XPLMGetDataf( ref_grnd_spd ) ) 
+       ) {
         XPLMSetDatai( ref_xpndr_mode, 2 );
         XPLMSetDatai( ref_xpndr_setting, config_default_xpndr_setting );
     }
