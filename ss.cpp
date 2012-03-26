@@ -36,6 +36,17 @@ XPLMDataRef ref_use_sys_time    = NULL;
 XPLMDataRef ref_local_time      = NULL;
 XPLMDataRef ref_zulu_time       = NULL;
 
+XPLMDataRef ref_heading         = NULL;
+
+XPLMDataRef ref_wind_speed0     = NULL;
+XPLMDataRef ref_wind_speed1     = NULL;
+XPLMDataRef ref_wind_speed2     = NULL;
+
+XPLMDataRef ref_wind_direction  = NULL;
+XPLMDataRef ref_wind_altitude   = NULL;
+
+int wind_state = WIND_STATE_INITIAL;
+
 XPLMWindowID	debug_window = NULL;
 int				clicked = 0;
 
@@ -44,6 +55,9 @@ float config_visibility_setting;
 float config_min_cloud_base;
 float config_reset_time_seconds;
 int config_time_rollback_seconds;
+float config_wind_transition_altitude;
+float config_tailwind_speed;
+float config_headwind_speed;
 
 char debug_string[255];
 
@@ -75,8 +89,8 @@ void initConfig() {
     /* in meters - 40km =~ 25 sm */
     config_visibility_setting    = 40000;
 
-    /* in meters - 650m =~ 2100k ft */
-    config_min_cloud_base = 650;
+    /* in meters - 800m =~ 2600 ft */
+    config_min_cloud_base = 800;
 
     /* time reset - time is measured in seconds since midnight -
      * config_reset_time_seconds is the time (in seconds since midnight) at which we start rolling back
@@ -88,6 +102,11 @@ void initConfig() {
     /* roll back 10 hours, or 3600 seconds */
     config_time_rollback_seconds = 36000;
 
+    /* 800 meters =~ 2600 ft */
+    config_wind_transition_altitude = 800;
+
+    config_tailwind_speed = 20;
+    config_headwind_speed = 5;
 }
 
 float SmoothSailingCallback(
@@ -96,15 +115,90 @@ float SmoothSailingCallback(
         int     inCounter,
         void    *inRefcon) {
 
-    /* get altitude agl - it's used in a number of places */
+    /* get altitude - it's used in a number of places */
     float alt_agl = XPLMGetDataf( ref_alt_agl );
+    float alt_msl = XPLMGetDataf( ref_alt_msl );
 
     initXpndr( alt_agl );
     setVisibility();
-    setCloudBase( alt_agl );
+    setCloudBase( alt_agl, alt_msl );
     setLocalTime( alt_agl );
+    setWind( alt_agl, alt_msl );
 
     return CALLBACK_INTERVAL;
+}
+
+void setWind( float alt_agl, float alt_msl ) {
+    int wind_speed;
+    float wind_direction, target_speed;
+
+    static int transition_steps = 0;
+    static float direction_interval, speed_interval, origin_direction, target_direction, origin_speed;
+
+    float heading = XPLMGetDataf( ref_heading );
+
+    /* wind alt should always be the plane's alt */
+    XPLMSetDatai( ref_wind_altitude, alt_msl );
+
+    switch( wind_state ) {
+        case WIND_STATE_INITIAL:
+            sprintf( debug_string, "wind state initial" );
+            /* don't change the weather, just check to see if we're reading for a state change */
+            if( alt_agl > config_wind_transition_altitude ) {
+                wind_state          = WIND_STATE_AT;
+
+                /* from initial the only transition is to the AT state, so we want to work towards a
+                 * 20kt tail wind */
+                origin_speed        = XPLMGetDataf( ref_wind_speed0 );
+                speed_interval      = config_tailwind_speed > origin_speed
+                                        ? ( config_tailwind_speed - origin_speed ) / WIND_TRANSITION_STEPS
+                                        : ( origin_speed - config_tailwind_speed ) / WIND_TRANSITION_STEPS;
+
+                origin_direction    = XPLMGetDataf( ref_wind_direction );
+                target_direction    = heading > 180 ? heading - 180 : heading + 180;
+                direction_interval  = ( origin_direction > target_direction )
+                                        ? ( origin_direction - target_direction ) / WIND_TRANSITION_STEPS
+                                        : ( target_direction - origin_direction ) / WIND_TRANSITION_STEPS;
+
+                transition_steps    = 0;
+            }
+            break;
+
+        case WIND_STATE_AT:
+            /* in the transition state, we want to move direction to 180 degrees from heading,
+             * and move the speed to 20kts */
+            sprintf( debug_string, "os: %f, interval: %f", origin_speed, speed_interval );
+            
+            transition_steps++;
+
+            target_speed = config_tailwind_speed > origin_speed 
+                                            ? origin_speed + ( speed_interval * transition_steps )
+                                            : origin_speed - ( speed_interval * transition_steps );
+
+
+            /* set all three layers so the speed is predictable as you climb */
+            XPLMSetDataf( ref_wind_speed0, target_speed);
+            XPLMSetDataf( ref_wind_speed1, target_speed);
+            XPLMSetDataf( ref_wind_speed2, target_speed);
+
+            XPLMSetDataf( ref_wind_direction, origin_direction > target_direction
+                                                ? origin_direction - ( direction_interval * transition_steps )
+                                                : origin_direction + ( direction_interval * transition_steps )
+                        );
+
+            if( transition_steps >= WIND_TRANSITION_STEPS ) {
+                wind_state = WIND_STATE_AP;
+            }
+
+            break;
+    
+        case WIND_STATE_AP:
+            /* persistant state - preserve tailwind */
+            XPLMSetDataf( ref_wind_speed0, config_tailwind_speed );
+            XPLMSetDataf( ref_wind_speed1, config_tailwind_speed );
+            XPLMSetDataf( ref_wind_speed2, config_tailwind_speed );
+            XPLMSetDataf( ref_wind_direction, heading > 180 ? heading - 180 : heading + 180 ); 
+    }
 }
 
 void setLocalTime( float alt_agl ) {
@@ -118,19 +212,19 @@ void setLocalTime( float alt_agl ) {
         if( local_time_seconds > config_reset_time_seconds ) {
             /* first, set use system time to 0 */
             XPLMSetDatai( ref_use_sys_time, 0 );
-            
-            new_zulu_seconds = XPLMGetDataf( ref_zulu_time ) - config_time_rollback_seconds; 
-            new_local_seconds = XPLMGetDataf( ref_local_time ) - config_time_rollback_seconds; 
-            
+
+            new_zulu_seconds = XPLMGetDataf( ref_zulu_time ) - config_time_rollback_seconds;
+            new_local_seconds = XPLMGetDataf( ref_local_time ) - config_time_rollback_seconds;
+
             XPLMSetDataf( ref_zulu_time, new_zulu_seconds );
         }
     }
 }
 
-void setCloudBase( float alt_agl ) {
+void setCloudBase( float alt_agl, float alt_msl ) {
 
     float cloud_base_msl = XPLMGetDataf( ref_cloud_base0 );
-    float ground_level   = XPLMGetDataf( ref_alt_msl ) - alt_agl;
+    float ground_level   = alt_msl - alt_agl;
     float cloud_base_agl = cloud_base_msl - ground_level;
 
     /* find the difference betwee the lowest cloud layer and what we want,
@@ -207,6 +301,14 @@ PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc) {
 
     ref_local_time      = XPLMFindDataRef("sim/time/local_time_sec");
     ref_zulu_time       = XPLMFindDataRef("sim/time/zulu_time_sec");
+
+    /* datarefs for wind */
+    ref_heading         = XPLMFindDataRef("sim/flightmodel/position/psi");
+    ref_wind_speed0     = XPLMFindDataRef("sim/weather/wind_speed_kt[0]");
+    ref_wind_speed1     = XPLMFindDataRef("sim/weather/wind_speed_kt[1]");
+    ref_wind_speed2     = XPLMFindDataRef("sim/weather/wind_speed_kt[2]");
+    ref_wind_direction  = XPLMFindDataRef("sim/weather/wind_direction_degt[0]");
+    ref_wind_altitude   = XPLMFindDataRef("sim/weather/wind_altitude_msl_m[0]");
 
     // * Register our callback for every loop. Positive intervals
     // * are in seconds, negative are the negative of sim frames.  Zero
