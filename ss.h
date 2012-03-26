@@ -8,7 +8,9 @@
 #define CALLBACK_INTERVAL -1
 
 
-void initXpndr( void );
+void initXpndr( float );
 void initConfig( void );
 void setVisibility( void );
-void setCloudBase( void );
+void setCloudBase( float );
+void setLocalTime( float );
+
