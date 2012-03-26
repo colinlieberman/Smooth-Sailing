@@ -32,10 +32,9 @@ XPLMDataRef ref_cloud_tops0     = NULL;
 XPLMDataRef ref_cloud_tops1     = NULL;
 XPLMDataRef ref_cloud_tops2     = NULL;
 
+XPLMDataRef ref_use_sys_time    = NULL;
 XPLMDataRef ref_local_time      = NULL;
 XPLMDataRef ref_zulu_time       = NULL;
-XPLMDataRef ref_clock_z_hr      = NULL;
-XPLMDataRef ref_clock_l_hr      = NULL;
 
 XPLMWindowID	debug_window = NULL;
 int				clicked = 0;
@@ -117,23 +116,13 @@ void setLocalTime( float alt_agl ) {
         local_time_seconds = XPLMGetDataf( ref_local_time );
 
         if( local_time_seconds > config_reset_time_seconds ) {
+            /* first, set use system time to 0 */
+            XPLMSetDatai( ref_use_sys_time, 0 );
+            
             new_zulu_seconds = XPLMGetDataf( ref_zulu_time ) - config_time_rollback_seconds; 
             new_local_seconds = XPLMGetDataf( ref_local_time ) - config_time_rollback_seconds; 
             
             XPLMSetDataf( ref_zulu_time, new_zulu_seconds );
-            XPLMSetDataf( ref_local_time, new_local_seconds );
-            
-            /* TODO: figure out how to set the clock correclty */
-            /* set the clock to display correctly */
-            /* FIXME: assuming rollback is interval of an hour */
-            /*
-            hr_rollback = ( config_time_rollback_seconds - ( (int)config_time_rollback_seconds % 3600 ) ) / 3600;
-            z_hr  = XPLMGetDatai( ref_clock_z_hr ) - hr_rollback;
-            l_hr  = XPLMGetDatai( ref_clock_l_hr ) - hr_rollback;
-        
-            XPLMSetDatai( ref_clock_z_hr, z_hr );
-            XPLMSetDatai( ref_clock_l_hr, l_hr );
-            */
         }
     }
 }
@@ -210,10 +199,14 @@ PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc) {
     ref_alt_msl         = XPLMFindDataRef("sim/flightmodel/position/elevation");
 
     /* datarefs for setting time */
+    /* in order for the clock to be set right, we need to make sure we're using
+     * system time initially to get local time, then turn off use system time before
+     * changing the time */
+    ref_use_sys_time    = XPLMFindDataRef("sim/time/use_system_time");
+    XPLMSetDatai( ref_use_sys_time, 1 );
+
     ref_local_time      = XPLMFindDataRef("sim/time/local_time_sec");
     ref_zulu_time       = XPLMFindDataRef("sim/time/zulu_time_sec");
-    ref_clock_z_hr      = XPLMFindDataRef("sim/cockpit2/clock_timer/zulu_time_hours");
-    ref_clock_l_hr      = XPLMFindDataRef("sim/cockpit2/clock_timer/local_time_hours");
 
     // * Register our callback for every loop. Positive intervals
     // * are in seconds, negative are the negative of sim frames.  Zero
