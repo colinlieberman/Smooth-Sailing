@@ -30,4 +30,4 @@ void setVisibility( void );
 void setCloudBase( float, float );
 void setLocalTime( float );
 void setWind( float, float );
-
+void resetTime( void );

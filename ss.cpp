@@ -53,8 +53,10 @@ int				clicked = 0;
 int config_default_xpndr_setting;
 float config_visibility_setting;
 float config_min_cloud_base;
-float config_reset_time_seconds;
+float config_late_time_seconds;
+float config_early_time_seconds;
 int config_time_rollback_seconds;
+int config_time_push_forward_seconds;
 float config_wind_transition_altitude;
 float config_tailwind_speed;
 float config_headwind_speed;
@@ -93,14 +95,23 @@ void initConfig() {
     config_min_cloud_base = 800;
 
     /* time reset - time is measured in seconds since midnight -
-     * config_reset_time_seconds is the time (in seconds since midnight) at which we start rolling back
-     * config_time_rollback_seconds is the number of seconds to roll back */
+     * config_late_time_seconds is the time (in seconds since midnight) at which we start rolling back
+     * config_early_time_seconds is similar, but for too early in the morning
+     * config_time_rollback_seconds is the number of seconds to roll back 
+     * config_time_push_forward_seconds is the number of seconds to push forward */
+     
 
     /* 7pm = 19 hours from midnight = 68400 seconds */
-    config_reset_time_seconds = 68400;
+    config_late_time_seconds = 68400;
+
+    /* 6am = 6 hours = 21600 seconds */
+    config_early_time_seconds = 21600;
 
     /* roll back 10 hours, or 3600 seconds */
     config_time_rollback_seconds = 36000;
+
+    /* push forward 6 hours, or 21600 seconds */
+    config_time_push_forward_seconds = 21600;
 
     /* 800 meters =~ 2600 ft */
     config_wind_transition_altitude = 800;
@@ -142,7 +153,6 @@ void setWind( float alt_agl, float alt_msl ) {
 
     switch( wind_state ) {
         case WIND_STATE_INITIAL:
-            sprintf( debug_string, "wind state initial" );
             /* don't change the weather, just check to see if we're reading for a state change */
             if( alt_agl > config_wind_transition_altitude ) {
                 wind_state          = WIND_STATE_AT;
@@ -167,7 +177,6 @@ void setWind( float alt_agl, float alt_msl ) {
         case WIND_STATE_AT:
             /* in the transition state, we want to move direction to 180 degrees from heading,
              * and move the speed to 20kts */
-            sprintf( debug_string, "os: %f, interval: %f", origin_speed, speed_interval );
             
             transition_steps++;
 
@@ -209,14 +218,22 @@ void setLocalTime( float alt_agl ) {
     if( !floor( alt_agl ) && !floor( XPLMGetDataf( ref_grnd_spd ) ) ) {
         local_time_seconds = XPLMGetDataf( ref_local_time );
 
-        if( local_time_seconds > config_reset_time_seconds ) {
+        if( local_time_seconds > config_late_time_seconds ) {
             /* first, set use system time to 0 */
             XPLMSetDatai( ref_use_sys_time, 0 );
-
             new_zulu_seconds = XPLMGetDataf( ref_zulu_time ) - config_time_rollback_seconds;
             new_local_seconds = XPLMGetDataf( ref_local_time ) - config_time_rollback_seconds;
 
             XPLMSetDataf( ref_zulu_time, new_zulu_seconds );
+        }
+        else if( local_time_seconds < config_early_time_seconds ) {
+            /* first, set use system time to 0 */
+            XPLMSetDatai( ref_use_sys_time, 0 );
+            new_zulu_seconds = XPLMGetDataf( ref_zulu_time ) + config_time_push_forward_seconds;
+            new_local_seconds = XPLMGetDataf( ref_local_time ) + config_time_push_forward_seconds;
+
+            XPLMSetDataf( ref_zulu_time, new_zulu_seconds );
+        
         }
     }
 }
@@ -263,6 +280,13 @@ void initXpndr(float alt_agl) {
     }
 }
 
+void resetTime() {
+    /* in order for the clock to be set right, we need to make sure we're using
+     * system time initially to get local time, then turn off use system time before
+     * changing the time */
+    XPLMSetDatai( ref_use_sys_time, 1 );
+}
+
 PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc) {
 
     /* First set up our plugin info. */
@@ -293,11 +317,7 @@ PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc) {
     ref_alt_msl         = XPLMFindDataRef("sim/flightmodel/position/elevation");
 
     /* datarefs for setting time */
-    /* in order for the clock to be set right, we need to make sure we're using
-     * system time initially to get local time, then turn off use system time before
-     * changing the time */
     ref_use_sys_time    = XPLMFindDataRef("sim/time/use_system_time");
-    XPLMSetDatai( ref_use_sys_time, 1 );
 
     ref_local_time      = XPLMFindDataRef("sim/time/local_time_sec");
     ref_zulu_time       = XPLMFindDataRef("sim/time/zulu_time_sec");
@@ -348,6 +368,11 @@ PLUGIN_API int XPluginEnable(void) {
 }
 
 PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, void *inParam){
+    
+    if( inMessage >= XPLM_MSG_AIRPORT_LOADED || inMessage == XPLM_MSG_PLANE_LOADED ) {
+        /* anything that looks like the situation was reset, reset the clock */ 
+        resetTime();
+    }
 }
 
 /*
