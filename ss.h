@@ -28,6 +28,5 @@ void initXpndr( float );
 void initConfig( void );
 void setVisibility( void );
 void setCloudBase( float, float );
-void setLocalTime( float );
 void setWind( float, float );
 void resetTime( void );

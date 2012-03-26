@@ -133,7 +133,6 @@ float SmoothSailingCallback(
     initXpndr( alt_agl );
     setVisibility();
     setCloudBase( alt_agl, alt_msl );
-    setLocalTime( alt_agl );
     setWind( alt_agl, alt_msl );
 
     return CALLBACK_INTERVAL;
@@ -210,34 +209,6 @@ void setWind( float alt_agl, float alt_msl ) {
     }
 }
 
-void setLocalTime( float alt_agl ) {
-    float local_time_seconds, new_zulu_seconds, new_local_seconds;
-    int z_hr, l_hr, hr_rollback;
-
-    /* don't set the time if the plane is flying! */
-    if( !floor( alt_agl ) && !floor( XPLMGetDataf( ref_grnd_spd ) ) ) {
-        local_time_seconds = XPLMGetDataf( ref_local_time );
-
-        if( local_time_seconds > config_late_time_seconds ) {
-            /* first, set use system time to 0 */
-            XPLMSetDatai( ref_use_sys_time, 0 );
-            new_zulu_seconds = XPLMGetDataf( ref_zulu_time ) - config_time_rollback_seconds;
-            new_local_seconds = XPLMGetDataf( ref_local_time ) - config_time_rollback_seconds;
-
-            XPLMSetDataf( ref_zulu_time, new_zulu_seconds );
-        }
-        else if( local_time_seconds < config_early_time_seconds ) {
-            /* first, set use system time to 0 */
-            XPLMSetDatai( ref_use_sys_time, 0 );
-            new_zulu_seconds = XPLMGetDataf( ref_zulu_time ) + config_time_push_forward_seconds;
-            new_local_seconds = XPLMGetDataf( ref_local_time ) + config_time_push_forward_seconds;
-
-            XPLMSetDataf( ref_zulu_time, new_zulu_seconds );
-        
-        }
-    }
-}
-
 void setCloudBase( float alt_agl, float alt_msl ) {
 
     float cloud_base_msl = XPLMGetDataf( ref_cloud_base0 );
@@ -281,10 +252,25 @@ void initXpndr(float alt_agl) {
 }
 
 void resetTime() {
+    float local_time_seconds, new_zulu_seconds;
+    
     /* in order for the clock to be set right, we need to make sure we're using
      * system time initially to get local time, then turn off use system time before
      * changing the time */
     XPLMSetDatai( ref_use_sys_time, 1 );
+    
+    local_time_seconds = XPLMGetDataf( ref_local_time );
+
+    if( local_time_seconds > config_late_time_seconds ) {
+        new_zulu_seconds = XPLMGetDataf( ref_zulu_time ) - config_time_rollback_seconds;
+        XPLMSetDataf( ref_zulu_time, new_zulu_seconds );
+    }
+    else if( local_time_seconds < config_early_time_seconds ) {
+        new_zulu_seconds = XPLMGetDataf( ref_zulu_time ) + config_time_push_forward_seconds;
+        XPLMSetDataf( ref_zulu_time, new_zulu_seconds );
+    }
+        
+    XPLMSetDatai( ref_use_sys_time, 0 );
 }
 
 PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc) {
