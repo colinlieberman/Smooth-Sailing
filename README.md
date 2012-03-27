@@ -9,5 +9,5 @@ It's inspired by, and similar to, these two excellent projects:
 
 The difference between this effort and those is that this one is focused on convenience only - doing things automatically so you don't have to tell the system how you want to change the wind, for example, and focusing solely on those changes.
 
-The game plan for what I will build is detailed on the [specification page](wiki/Spec).
+The game plan for what I will build is detailed on the [specification page](https://github.com/colinlieberman/Smooth-Sailing/wiki/Spec).
 
