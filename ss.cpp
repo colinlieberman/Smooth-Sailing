@@ -42,8 +42,17 @@ XPLMDataRef ref_wind_speed0     = NULL;
 XPLMDataRef ref_wind_speed1     = NULL;
 XPLMDataRef ref_wind_speed2     = NULL;
 
-XPLMDataRef ref_wind_direction  = NULL;
+XPLMDataRef ref_wind_direction0 = NULL;
+XPLMDataRef ref_wind_direction1 = NULL;
+XPLMDataRef ref_wind_direction2 = NULL;
+
 XPLMDataRef ref_wind_altitude   = NULL;
+
+/* time is being weird - it looks like I have to set it during the callback for it to get 
+ * set right on initial load - just calling it from the messaging function only works
+ * when you move the airplane, not when x-plane starts. so i'm going to set a flag at that time instead
+ */
+bool reset_time = true;
 
 int wind_state = WIND_STATE_INITIAL;
 
@@ -101,8 +110,9 @@ void initConfig() {
      * config_time_push_forward_seconds is the number of seconds to push forward */
      
 
-    /* 7pm = 19 hours from midnight = 68400 seconds */
-    config_late_time_seconds = 68400;
+    /* 4pm = 16 hours from midnight = 57600 seconds */
+    /* use 4pm so there's a good 3 hours or so flight time available */
+    config_late_time_seconds = 57600;
 
     /* 6am = 6 hours = 21600 seconds */
     config_early_time_seconds = 21600;
@@ -129,6 +139,12 @@ float SmoothSailingCallback(
     /* get altitude - it's used in a number of places */
     float alt_agl = XPLMGetDataf( ref_alt_agl );
     float alt_msl = XPLMGetDataf( ref_alt_msl );
+    
+    //local_time_seconds = XPLMGetDataf( ref_local_time );
+
+    if( reset_time ) {
+        resetTime();
+    }
 
     initXpndr( alt_agl );
     setVisibility();
@@ -150,26 +166,13 @@ void setWind( float alt_agl, float alt_msl ) {
     /* wind alt should always be the plane's alt */
     XPLMSetDatai( ref_wind_altitude, alt_msl );
 
+    sprintf( debug_string, "wind state is %d", wind_state );
+
     switch( wind_state ) {
         case WIND_STATE_INITIAL:
             /* don't change the weather, just check to see if we're reading for a state change */
             if( alt_agl > config_wind_transition_altitude ) {
-                wind_state          = WIND_STATE_AT;
-
-                /* from initial the only transition is to the AT state, so we want to work towards a
-                 * 20kt tail wind */
-                origin_speed        = XPLMGetDataf( ref_wind_speed0 );
-                speed_interval      = config_tailwind_speed > origin_speed
-                                        ? ( config_tailwind_speed - origin_speed ) / WIND_TRANSITION_STEPS
-                                        : ( origin_speed - config_tailwind_speed ) / WIND_TRANSITION_STEPS;
-
-                origin_direction    = XPLMGetDataf( ref_wind_direction );
-                target_direction    = heading > 180 ? heading - 180 : heading + 180;
-                direction_interval  = ( origin_direction > target_direction )
-                                        ? ( origin_direction - target_direction ) / WIND_TRANSITION_STEPS
-                                        : ( target_direction - origin_direction ) / WIND_TRANSITION_STEPS;
-
-                transition_steps    = 0;
+                TRANSITION_TO_AT
             }
             break;
 
@@ -185,28 +188,72 @@ void setWind( float alt_agl, float alt_msl ) {
 
 
             /* set all three layers so the speed is predictable as you climb */
-            XPLMSetDataf( ref_wind_speed0, target_speed);
-            XPLMSetDataf( ref_wind_speed1, target_speed);
-            XPLMSetDataf( ref_wind_speed2, target_speed);
-
-            XPLMSetDataf( ref_wind_direction, origin_direction > target_direction
+            SET_WIND( target_speed, origin_direction > target_direction
                                                 ? origin_direction - ( direction_interval * transition_steps )
                                                 : origin_direction + ( direction_interval * transition_steps )
-                        );
+            )
 
             if( transition_steps >= WIND_TRANSITION_STEPS ) {
                 wind_state = WIND_STATE_AP;
+            }
+   
+            else if( alt_agl < config_wind_transition_altitude ) {
+                TRANSITION_TO_BT
             }
 
             break;
     
         case WIND_STATE_AP:
             /* persistant state - preserve tailwind */
-            XPLMSetDataf( ref_wind_speed0, config_tailwind_speed );
-            XPLMSetDataf( ref_wind_speed1, config_tailwind_speed );
-            XPLMSetDataf( ref_wind_speed2, config_tailwind_speed );
-            XPLMSetDataf( ref_wind_direction, heading > 180 ? heading - 180 : heading + 180 ); 
-    }
+            SET_WIND( config_tailwind_speed, OPP_HEADING )
+
+            if( alt_agl < config_wind_transition_altitude ) {
+                TRANSITION_TO_BT
+            }
+            break;
+
+        case WIND_STATE_BT:
+            
+            transition_steps++;
+
+            target_speed = origin_speed > config_headwind_speed
+                                            ? origin_speed - ( speed_interval * transition_steps )
+                                            : origin_speed + ( speed_interval * transition_steps );
+
+
+            /* set all three layers so the speed is predictable as you climb */
+            SET_WIND( target_speed, origin_direction > target_direction
+                                                ? origin_direction - ( direction_interval * transition_steps )
+                                                : origin_direction + ( direction_interval * transition_steps )
+            );
+
+            if( alt_agl < 1 ) {
+                wind_state = WIND_STATE_INITIAL;
+            }
+            
+            else if( transition_steps >= WIND_TRANSITION_STEPS ) {
+                wind_state = WIND_STATE_BP;
+            }
+            
+            else if( alt_agl > config_wind_transition_altitude ) {
+                TRANSITION_TO_AT
+            }
+
+            break;
+    
+        case WIND_STATE_BP:
+            /* persistant state - preserve tailwind */
+            SET_WIND( config_headwind_speed, heading )
+            
+            if( alt_agl < 1 ) {
+                wind_state = WIND_STATE_INITIAL;
+            }
+            
+            else if( alt_agl > config_wind_transition_altitude ) {
+                TRANSITION_TO_AT
+            }
+            break;
+   }
 }
 
 void setCloudBase( float alt_agl, float alt_msl ) {
@@ -256,21 +303,23 @@ void resetTime() {
     
     /* in order for the clock to be set right, we need to make sure we're using
      * system time initially to get local time, then turn off use system time before
-     * changing the time */
-    XPLMSetDatai( ref_use_sys_time, 1 );
+     * changing the time -- using system time is set in the message handler */
     
     local_time_seconds = XPLMGetDataf( ref_local_time );
+    new_zulu_seconds = XPLMGetDataf( ref_zulu_time );
 
     if( local_time_seconds > config_late_time_seconds ) {
-        new_zulu_seconds = XPLMGetDataf( ref_zulu_time ) - config_time_rollback_seconds;
-        XPLMSetDataf( ref_zulu_time, new_zulu_seconds );
+        new_zulu_seconds -= config_time_rollback_seconds;
     }
     else if( local_time_seconds < config_early_time_seconds ) {
-        new_zulu_seconds = XPLMGetDataf( ref_zulu_time ) + config_time_push_forward_seconds;
-        XPLMSetDataf( ref_zulu_time, new_zulu_seconds );
+        new_zulu_seconds += config_time_push_forward_seconds;
     }
-        
+    
+    /* always turn off system time and always change it to make sure the clock gets set correctly */
     XPLMSetDatai( ref_use_sys_time, 0 );
+    XPLMSetDataf( ref_zulu_time, new_zulu_seconds );
+    
+    reset_time = false;
 }
 
 PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc) {
@@ -304,7 +353,7 @@ PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc) {
 
     /* datarefs for setting time */
     ref_use_sys_time    = XPLMFindDataRef("sim/time/use_system_time");
-
+    
     ref_local_time      = XPLMFindDataRef("sim/time/local_time_sec");
     ref_zulu_time       = XPLMFindDataRef("sim/time/zulu_time_sec");
 
@@ -313,9 +362,21 @@ PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc) {
     ref_wind_speed0     = XPLMFindDataRef("sim/weather/wind_speed_kt[0]");
     ref_wind_speed1     = XPLMFindDataRef("sim/weather/wind_speed_kt[1]");
     ref_wind_speed2     = XPLMFindDataRef("sim/weather/wind_speed_kt[2]");
-    ref_wind_direction  = XPLMFindDataRef("sim/weather/wind_direction_degt[0]");
+    ref_wind_direction0 = XPLMFindDataRef("sim/weather/wind_direction_degt[0]");
+    ref_wind_direction1 = XPLMFindDataRef("sim/weather/wind_direction_degt[1]");
+    ref_wind_direction2 = XPLMFindDataRef("sim/weather/wind_direction_degt[2]");
     ref_wind_altitude   = XPLMFindDataRef("sim/weather/wind_altitude_msl_m[0]");
 
+	if( DEBUG ) {
+        debug_window = XPLMCreateWindow(
+                        50, 600, 400, 200,			/* Area of the window. */
+                        1,							/* Start visible. */
+                        MyDrawWindowCallback,		/* Callbacks */
+                        MyHandleKeyCallback,
+                        MyHandleMouseClickCallback,
+                        NULL);						/* Refcon - not used. */
+    }
+        
     // * Register our callback for every loop. Positive intervals
     // * are in seconds, negative are the negative of sim frames.  Zero
     // * registers but does not schedule a callback for time.
@@ -323,16 +384,6 @@ PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc) {
             SmoothSailingCallback,	// * Callback *
             CALLBACK_INTERVAL,          // * Interval -1 every loop*
             NULL);				        // * refcon not used. *
-
-	if( DEBUG ) {
-        debug_window = XPLMCreateWindow(
-                        50, 600, 300, 200,			/* Area of the window. */
-                        1,							/* Start visible. */
-                        MyDrawWindowCallback,		/* Callbacks */
-                        MyHandleKeyCallback,
-                        MyHandleMouseClickCallback,
-                        NULL);						/* Refcon - not used. */
-    }
 
     return 1;
 }
@@ -357,7 +408,11 @@ PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, vo
     
     if( inMessage >= XPLM_MSG_AIRPORT_LOADED || inMessage == XPLM_MSG_PLANE_LOADED ) {
         /* anything that looks like the situation was reset, reset the clock */ 
-        resetTime();
+        
+        /* need to set use sys time here so the data refs we check when resetting the time get a chance to
+         * update in the callback */
+        XPLMSetDatai( ref_use_sys_time, 1 );
+        reset_time = true;
     }
 }
 
