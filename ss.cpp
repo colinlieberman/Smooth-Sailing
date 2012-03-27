@@ -164,7 +164,7 @@ void setWind( float alt_agl, float alt_msl ) {
     float heading = XPLMGetDataf( ref_heading );
 
     /* wind alt should always be the plane's alt */
-    XPLMSetDatai( ref_wind_altitude, alt_msl );
+    XPLMSetDataf( ref_wind_altitude, alt_msl );
 
     sprintf( debug_string, "wind state is %d", wind_state );
 
@@ -188,10 +188,10 @@ void setWind( float alt_agl, float alt_msl ) {
 
 
             /* set all three layers so the speed is predictable as you climb */
-            SET_WIND( target_speed, origin_direction > target_direction
+            forceWind( target_speed, origin_direction > target_direction
                                                 ? origin_direction - ( direction_interval * transition_steps )
                                                 : origin_direction + ( direction_interval * transition_steps )
-            )
+            );
 
             if( transition_steps >= WIND_TRANSITION_STEPS ) {
                 wind_state = WIND_STATE_AP;
@@ -205,7 +205,7 @@ void setWind( float alt_agl, float alt_msl ) {
     
         case WIND_STATE_AP:
             /* persistant state - preserve tailwind */
-            SET_WIND( config_tailwind_speed, OPP_HEADING )
+            forceWind( config_tailwind_speed, OPP_HEADING );
 
             if( alt_agl < config_wind_transition_altitude ) {
                 TRANSITION_TO_BT
@@ -222,7 +222,7 @@ void setWind( float alt_agl, float alt_msl ) {
 
 
             /* set all three layers so the speed is predictable as you climb */
-            SET_WIND( target_speed, origin_direction > target_direction
+            forceWind( target_speed, origin_direction > target_direction
                                                 ? origin_direction - ( direction_interval * transition_steps )
                                                 : origin_direction + ( direction_interval * transition_steps )
             );
@@ -243,7 +243,7 @@ void setWind( float alt_agl, float alt_msl ) {
     
         case WIND_STATE_BP:
             /* persistant state - preserve tailwind */
-            SET_WIND( config_headwind_speed, heading )
+            forceWind( config_headwind_speed, heading );
             
             if( alt_agl < 1 ) {
                 wind_state = WIND_STATE_INITIAL;
@@ -254,6 +254,17 @@ void setWind( float alt_agl, float alt_msl ) {
             }
             break;
    }
+}
+
+void forceWind( float speed, float dir ) {
+    XPLMSetDataf( ref_wind_speed0, speed ); 
+    XPLMSetDataf( ref_wind_direction0, dir );
+    
+    XPLMSetDataf( ref_wind_speed1, speed );
+    XPLMSetDataf( ref_wind_direction1, dir );
+    
+    XPLMSetDataf( ref_wind_speed2, speed );
+    XPLMSetDataf( ref_wind_direction2, dir );
 }
 
 void setCloudBase( float alt_agl, float alt_msl ) {

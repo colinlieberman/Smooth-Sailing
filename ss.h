@@ -64,19 +64,11 @@
                 transition_steps    = 0; \
     }
 
-#define SET_WIND( speed, dir ) { \
-            XPLMSetDataf( ref_wind_speed0, speed ); \
-            XPLMSetDataf( ref_wind_speed1, speed ); \
-            XPLMSetDataf( ref_wind_speed2, speed ); \
-\
-            XPLMSetDataf( ref_wind_direction0, dir ); \
-            XPLMSetDataf( ref_wind_direction1, dir ); \
-            XPLMSetDataf( ref_wind_direction2, dir ); \
-    }
-
 void initXpndr( float );
 void initConfig( void );
 void setVisibility( void );
 void setCloudBase( float, float );
 void setWind( float, float );
 void resetTime( void );
+void forceWind( float, float );
+
