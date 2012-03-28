@@ -1,0 +1,23 @@
+CC          = gcc
+CXX         = g++
+INCPATH     = -I../xsdk/CHeaders/XPLM -I../xsdk/CHeaders/Wrappers -I../xsdk/CHeaders/Widgets -I.
+DEFINES     = -DXPLM200 -DAPL=1 -DIBM=0 -DLIN=0
+CFLAGS      = -m32 -pipe -O2 -Wall -W -fPIC $(DEFINES)
+CXXFLAGS    = -m32 -pipe -fvisibility=hidden -O2 -Wall -W -fPIC $(DEFINES)
+TARGET      = lin.xpl
+OBJECTS     = ss.o
+XP_PATH     = ~/X-Plane\ 9
+PLUGIN_PATH = $(XP_PATH)/Resources/plugins
+PKG_NAME    = AutoAngle
+LINK        = g++
+LFLAGS        = -m32 -Wl,-O1 -Wl,-rpath,/home/colin/QtSDK32/Desktop/Qt/474/gcc/lib -shared
+
+autoangle: ss.cpp ss.h
+	$(CXX) -c $(CXXFLAGS) -o ss.o ss.cpp $(INCPATH)
+	$(LINK) $(LFLAGS) -o $(TARGET) $(OBJECTS)
+
+clean: 
+	rm -dfr $(PKG_NAME); rm $(TARGET); rm $(OBJECTS)
+
+install:
+	mkdir $(PKG_NAME); cp $(TARGET) $(PKG_NAME)/; cp -R $(PKG_NAME) $(PLUGIN_PATH)/ 
