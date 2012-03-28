@@ -1,7 +1,7 @@
 CC          = gcc
 CXX         = g++
 INCPATH     = -I../xsdk/CHeaders/XPLM -I../xsdk/CHeaders/Wrappers -I../xsdk/CHeaders/Widgets -I.
-DEFINES     = -DXPLM200 -DAPL=1 -DIBM=0 -DLIN=0
+DEFINES     = -DXPLM200 -DAPL=0 -DIBM=0 -DLIN=1
 CFLAGS      = -m32 -pipe -O2 -Wall -W -fPIC $(DEFINES)
 CXXFLAGS    = -m32 -pipe -fvisibility=hidden -O2 -Wall -W -fPIC $(DEFINES)
 TARGET      = lin.xpl
