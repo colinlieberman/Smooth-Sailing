@@ -64,11 +64,13 @@
                 transition_steps    = 0; \
     }
 
-void initXpndr( float );
+void initXpndr( void );
 void initConfig( void );
 void setVisibility( void );
 void setCloudBase( float, float );
 void setWind( float, float );
 void resetTime( void );
 void forceWind( float, float );
+void setTurbulence( float );
+float getHighestCloudAlt( void );
 

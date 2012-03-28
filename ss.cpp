@@ -19,6 +19,7 @@
 
 XPLMDataRef ref_xpndr_mode      = NULL;
 XPLMDataRef ref_xpndr_setting   = NULL;
+
 XPLMDataRef ref_alt_agl         = NULL;
 XPLMDataRef ref_alt_msl         = NULL;
 XPLMDataRef ref_grnd_spd        = NULL;
@@ -31,6 +32,10 @@ XPLMDataRef ref_cloud_base2     = NULL;
 XPLMDataRef ref_cloud_tops0     = NULL;
 XPLMDataRef ref_cloud_tops1     = NULL;
 XPLMDataRef ref_cloud_tops2     = NULL;
+
+XPLMDataRef ref_cloud_type0     = NULL;
+XPLMDataRef ref_cloud_type1     = NULL;
+XPLMDataRef ref_cloud_type2     = NULL;
 
 XPLMDataRef ref_use_sys_time    = NULL;
 XPLMDataRef ref_local_time      = NULL;
@@ -45,6 +50,10 @@ XPLMDataRef ref_wind_speed2     = NULL;
 XPLMDataRef ref_wind_direction0 = NULL;
 XPLMDataRef ref_wind_direction1 = NULL;
 XPLMDataRef ref_wind_direction2 = NULL;
+
+XPLMDataRef ref_wind_turb0      = NULL;
+XPLMDataRef ref_wind_turb1      = NULL;
+XPLMDataRef ref_wind_turb2      = NULL;
 
 XPLMDataRef ref_wind_altitude   = NULL;
 
@@ -69,6 +78,7 @@ int config_time_push_forward_seconds;
 float config_wind_transition_altitude;
 float config_tailwind_speed;
 float config_headwind_speed;
+float config_max_turbulence;
 
 char debug_string[255];
 
@@ -128,6 +138,9 @@ void initConfig() {
 
     config_tailwind_speed = 20;
     config_headwind_speed = 5;
+
+    /* turbulence is 0 to 1, and it seems like units less than .1 are ignored */
+    config_max_turbulence = 0.3;
 }
 
 float SmoothSailingCallback(
@@ -140,23 +153,25 @@ float SmoothSailingCallback(
     float alt_agl = XPLMGetDataf( ref_alt_agl );
     float alt_msl = XPLMGetDataf( ref_alt_msl );
     
-    //local_time_seconds = XPLMGetDataf( ref_local_time );
-
-    if( reset_time ) {
+    /* only reset time if we think there's a reason to do it (set elsewhere)
+     * and if the plane is not in the air */
+    if( reset_time && alt_agl < 1 ) {
         resetTime();
     }
+    else {
+        reset_time = false;
+    }
 
-    initXpndr( alt_agl );
     setVisibility();
     setCloudBase( alt_agl, alt_msl );
     setWind( alt_agl, alt_msl );
+    setTurbulence( alt_msl );
 
     return CALLBACK_INTERVAL;
 }
 
 void setWind( float alt_agl, float alt_msl ) {
-    int wind_speed;
-    float wind_direction, target_speed;
+    float target_speed;
 
     static int transition_steps = 0;
     static float direction_interval, speed_interval, origin_direction, target_direction, origin_speed;
@@ -165,8 +180,6 @@ void setWind( float alt_agl, float alt_msl ) {
 
     /* wind alt should always be the plane's alt */
     XPLMSetDataf( ref_wind_altitude, alt_msl );
-
-    sprintf( debug_string, "wind state is %d", wind_state );
 
     switch( wind_state ) {
         case WIND_STATE_INITIAL:
@@ -254,9 +267,72 @@ void setWind( float alt_agl, float alt_msl ) {
             }
             break;
    }
+
+}
+
+float getHighestCloudAlt(){
+    float cloud_top_alts[3] ={ 
+         XPLMGetDataf( ref_cloud_tops0 )
+        ,XPLMGetDataf( ref_cloud_tops1 )
+        ,XPLMGetDataf( ref_cloud_tops2 )
+    };
+
+    int cloud_types[3] = {
+         XPLMGetDatai( ref_cloud_type0 )
+        ,XPLMGetDatai( ref_cloud_type1 )
+        ,XPLMGetDatai( ref_cloud_type2 )
+    };
+
+    int i;
+
+    float highest = 0;
+
+    for( i=0; i<3; i++ ) {
+        if( cloud_types[i] && cloud_top_alts[i] > highest ) {
+            highest = cloud_top_alts[i];
+        }
+    }
+
+    return highest;
+}
+
+void setTurbulence( float alt_msl ) {
+
+    /* turbulence is funny - when I hack the wind, it seems to want to crank up the 
+     * turbulence (maybe it's calculating it based on wind changes? 
+     *
+     * need to smoothe that out. also, i don't really want any turbulence
+     * if you're over the highest cloud layer */
+
+    float highest_cloud_alt = getHighestCloudAlt();
+  
+    float max_turbulence = config_max_turbulence;
+
+    /* if highest_cloud_alt is 0, then some turb is ok at any altitude */
+    if( highest_cloud_alt && alt_msl > highest_cloud_alt ) {
+        /* minimum is probably nicer than 0 */
+        max_turbulence = 0.1;
+    }
+    /* if highest_cloud_alt is 0, let's use a very small, but not minimal turb */
+    else if ( !highest_cloud_alt ) {
+        max_turbulence = 0.2;
+    }
+    
+    if( XPLMGetDataf( ref_wind_turb0 ) > max_turbulence ) {
+        XPLMSetDataf( ref_wind_turb0, max_turbulence );
+    }
+    
+    if( XPLMGetDataf( ref_wind_turb1 ) > max_turbulence ) {
+        XPLMSetDataf( ref_wind_turb1, max_turbulence );
+    }
+    
+    if( XPLMGetDataf( ref_wind_turb2 ) > max_turbulence ) {
+        XPLMSetDataf( ref_wind_turb2, max_turbulence );
+    }
 }
 
 void forceWind( float speed, float dir ) {
+    
     XPLMSetDataf( ref_wind_speed0, speed ); 
     XPLMSetDataf( ref_wind_direction0, dir );
     
@@ -293,17 +369,13 @@ void setVisibility() {
     XPLMSetDataf( ref_visibility, config_visibility_setting );
 }
 
-void initXpndr(float alt_agl) {
-    /* if the plane is stationary and altitude agl is 0, and the xpndr is off, turn it on */
+void initXpndr() {
     int xpndr_mode;
 
     xpndr_mode  = XPLMGetDatai( ref_xpndr_mode );
 
     /* Transponder mode (off=0 stdby=1 on=2 test=3) */
-    if(     !xpndr_mode
-            && !floor( alt_agl )
-            && !floor( XPLMGetDataf( ref_grnd_spd ) )
-       ) {
+    if( !xpndr_mode ) {
         XPLMSetDatai( ref_xpndr_mode, 2 );
         XPLMSetDatai( ref_xpndr_setting, config_default_xpndr_setting );
     }
@@ -360,6 +432,10 @@ PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc) {
     ref_cloud_tops1     = XPLMFindDataRef("sim/weather/cloud_tops_msl_m[1]");
     ref_cloud_tops2     = XPLMFindDataRef("sim/weather/cloud_tops_msl_m[2]");
 
+    ref_cloud_type0     = XPLMFindDataRef("sim/weather/cloud_type[0]");
+    ref_cloud_type1     = XPLMFindDataRef("sim/weather/cloud_type[1]");
+    ref_cloud_type2     = XPLMFindDataRef("sim/weather/cloud_type[2]");
+
     ref_alt_msl         = XPLMFindDataRef("sim/flightmodel/position/elevation");
 
     /* datarefs for setting time */
@@ -376,6 +452,9 @@ PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc) {
     ref_wind_direction0 = XPLMFindDataRef("sim/weather/wind_direction_degt[0]");
     ref_wind_direction1 = XPLMFindDataRef("sim/weather/wind_direction_degt[1]");
     ref_wind_direction2 = XPLMFindDataRef("sim/weather/wind_direction_degt[2]");
+    ref_wind_turb0      = XPLMFindDataRef("sim/weather/turbulence[0]");
+    ref_wind_turb1      = XPLMFindDataRef("sim/weather/turbulence[1]");
+    ref_wind_turb2      = XPLMFindDataRef("sim/weather/turbulence[2]");
     ref_wind_altitude   = XPLMFindDataRef("sim/weather/wind_altitude_msl_m[0]");
 
 	if( DEBUG ) {
@@ -417,13 +496,16 @@ PLUGIN_API int XPluginEnable(void) {
 
 PLUGIN_API void XPluginReceiveMessage(XPLMPluginID inFromWho, long inMessage, void *inParam){
     
-    if( inMessage >= XPLM_MSG_AIRPORT_LOADED || inMessage == XPLM_MSG_PLANE_LOADED ) {
-        /* anything that looks like the situation was reset, reset the clock */ 
-        
-        /* need to set use sys time here so the data refs we check when resetting the time get a chance to
-         * update in the callback */
+    if( inMessage == XPLM_MSG_AIRPORT_LOADED ) {
+        /* only reset time if the plane is positioned at a new airport, nothing else */
         XPLMSetDatai( ref_use_sys_time, 1 );
         reset_time = true;
+    
+        /* reset transponder if a new airport is loaded */
+        initXpndr();
+
+        /* reset wind manipulation */
+        wind_state = WIND_STATE_INITIAL;
     }
 }
 
