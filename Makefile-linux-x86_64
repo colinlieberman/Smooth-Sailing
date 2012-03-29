@@ -5,19 +5,25 @@ DEFINES     = -DXPLM200 -DAPL=0 -DIBM=0 -DLIN=1
 CFLAGS      = -m32 -pipe -O2 -Wall -W -fPIC $(DEFINES)
 CXXFLAGS    = -m32 -pipe -fvisibility=hidden -O2 -Wall -W -fPIC $(DEFINES)
 TARGET      = lin.xpl
-OBJECTS     = ss.o
+OBJECTS     = ss.o config.o
+CONF_FILE   = config.txt
+SOURCES     = ss.cpp ss.h config.cpp $(CONF_FILE)
 XP_PATH     = ~/X-Plane\ 9
 PLUGIN_PATH = $(XP_PATH)/Resources/plugins
 PKG_NAME    = SmoothSailing
 LINK        = g++
 LFLAGS        = -m32 -Wl,-O1 -Wl,-rpath,/home/colin/QtSDK32/Desktop/Qt/474/gcc/lib -shared
 
-autoangle: ss.cpp ss.h
+smoothsailing: $(SOURCES)
 	$(CXX) -c $(CXXFLAGS) -o ss.o ss.cpp $(INCPATH)
+	$(CXX) -c $(CXXFLAGS) -o config.o config.cpp $(INCPATH)
 	$(LINK) $(LFLAGS) -o $(TARGET) $(OBJECTS)
 
 clean: 
 	rm -dfr $(PKG_NAME); rm $(TARGET); rm $(OBJECTS)
 
-install:
-	mkdir $(PKG_NAME); cp $(TARGET) $(PKG_NAME)/; cp -R $(PKG_NAME) $(PLUGIN_PATH)/ 
+install: $(TARGET) $(CONF_FILE)
+	rm -dfr $(PKG_NAME); mkdir $(PKG_NAME)
+	cp $(TARGET) $(PKG_NAME)/
+	cp $(CONF_FILE) $(PKG_NAME)/
+	cp -R $(PKG_NAME) $(PLUGIN_PATH)/ 

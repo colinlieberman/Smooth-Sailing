@@ -1,22 +1,5 @@
 #include "ss.h"
 
-#include "XPLMDisplay.h"
-#include "XPLMGraphics.h"
-#include "XPLMUtilities.h"
-#include "XPLMDataAccess.h"
-#include "XPLMProcessing.h"
-#include "XPLMPlugin.h"
-#include "XPLMMenus.h"
-#include "XPWidgets.h"
-#include "XPStandardWidgets.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-
-#include <string>
-#include <string.h>
-#include <math.h>
-
 XPLMDataRef ref_xpndr_mode      = NULL;
 XPLMDataRef ref_xpndr_setting   = NULL;
 
@@ -68,17 +51,19 @@ int wind_state = WIND_STATE_INITIAL;
 XPLMWindowID	debug_window = NULL;
 int				clicked = 0;
 
-int config_default_xpndr_setting;
-float config_visibility_setting;
-float config_min_cloud_base;
-float config_late_time_seconds;
-float config_early_time_seconds;
-int config_time_rollback_seconds;
-int config_time_push_forward_seconds;
-float config_wind_transition_altitude;
-float config_tailwind_speed;
-float config_headwind_speed;
-float config_max_turbulence;
+extern int config_default_xpndr_setting;
+extern float config_visibility_setting;
+extern float config_min_cloud_base;
+extern float config_late_time_seconds;
+extern float config_early_time_seconds;
+extern int config_time_rollback_seconds;
+extern int config_time_push_forward_seconds;
+extern float config_wind_transition_altitude;
+extern float config_tailwind_speed;
+extern float config_headwind_speed;
+extern float config_max_turbulence_below;
+extern float config_max_turbulence_above;
+extern float config_max_turbulence_clear;
 
 char debug_string[255];
 
@@ -101,47 +86,6 @@ int MyHandleMouseClickCallback(
                                    int                  y,
                                    XPLMMouseStatus      inMouse,
                                    void *               inRefcon);
-
-void initConfig() {
-    /* TODO: make this a config file */
-
-    config_default_xpndr_setting = 1200;
-
-    /* in meters - 40km =~ 25 sm */
-    config_visibility_setting    = 40000;
-
-    /* in meters - 800m =~ 2600 ft */
-    config_min_cloud_base = 800;
-
-    /* time reset - time is measured in seconds since midnight -
-     * config_late_time_seconds is the time (in seconds since midnight) at which we start rolling back
-     * config_early_time_seconds is similar, but for too early in the morning
-     * config_time_rollback_seconds is the number of seconds to roll back 
-     * config_time_push_forward_seconds is the number of seconds to push forward */
-     
-
-    /* 4pm = 16 hours from midnight = 57600 seconds */
-    /* use 4pm so there's a good 3 hours or so flight time available */
-    config_late_time_seconds = 57600;
-
-    /* 6am = 6 hours = 21600 seconds */
-    config_early_time_seconds = 21600;
-
-    /* roll back 10 hours, or 3600 seconds */
-    config_time_rollback_seconds = 36000;
-
-    /* push forward 6 hours, or 21600 seconds */
-    config_time_push_forward_seconds = 21600;
-
-    /* 800 meters =~ 2600 ft */
-    config_wind_transition_altitude = 800;
-
-    config_tailwind_speed = 20;
-    config_headwind_speed = 5;
-
-    /* turbulence is 0 to 1, and it seems like units less than .1 are ignored */
-    config_max_turbulence = 0.3;
-}
 
 float SmoothSailingCallback(
         float   inElapsedSinceLastCall,
@@ -306,16 +250,16 @@ void setTurbulence( float alt_msl ) {
 
     float highest_cloud_alt = getHighestCloudAlt();
   
-    float max_turbulence = config_max_turbulence;
+    float max_turbulence = config_max_turbulence_below;
 
     /* if highest_cloud_alt is 0, then some turb is ok at any altitude */
     if( highest_cloud_alt && alt_msl > highest_cloud_alt ) {
         /* minimum is probably nicer than 0 */
-        max_turbulence = 0.1;
+        max_turbulence = config_max_turbulence_above;
     }
     /* if highest_cloud_alt is 0, let's use a very small, but not minimal turb */
     else if ( !highest_cloud_alt ) {
-        max_turbulence = 0.2;
+        max_turbulence = config_max_turbulence_clear;
     }
     
     if( XPLMGetDataf( ref_wind_turb0 ) > max_turbulence ) {

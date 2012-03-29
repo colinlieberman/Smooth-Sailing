@@ -1,8 +1,22 @@
 
+#include "XPLMDisplay.h"
+#include "XPLMGraphics.h"
 #include "XPLMUtilities.h"
+#include "XPLMDataAccess.h"
+#include "XPLMProcessing.h"
+#include "XPLMPlugin.h"
 #include "XPLMMenus.h"
 #include "XPWidgets.h"
 #include "XPStandardWidgets.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+
+#include <string>
+using namespace std;
+
+#include <string.h>
+#include <math.h>
 
 #define DEBUG 0
 #define CALLBACK_INTERVAL -1
