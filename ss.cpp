@@ -16,10 +16,6 @@ XPLMDataRef ref_cloud_tops0     = NULL;
 XPLMDataRef ref_cloud_tops1     = NULL;
 XPLMDataRef ref_cloud_tops2     = NULL;
 
-XPLMDataRef ref_cloud_type0     = NULL;
-XPLMDataRef ref_cloud_type1     = NULL;
-XPLMDataRef ref_cloud_type2     = NULL;
-
 XPLMDataRef ref_use_sys_time    = NULL;
 XPLMDataRef ref_local_time      = NULL;
 XPLMDataRef ref_zulu_time       = NULL;
@@ -35,6 +31,7 @@ XPLMDataRef ref_wind_direction1 = NULL;
 XPLMDataRef ref_wind_direction2 = NULL;
 
 XPLMDataRef ref_wind_altitude   = NULL;
+XPLMDataRef ref_wind_turb0      = NULL;
 
 /* time is being weird - it looks like I have to set it during the callback for it to get 
  * set right on initial load - just calling it from the messaging function only works
@@ -42,7 +39,8 @@ XPLMDataRef ref_wind_altitude   = NULL;
  */
 bool reset_time = true;
 
-int wind_state = WIND_STATE_INITIAL;
+int  wind_state   = WIND_STATE_INITIAL;
+bool change_p_dir = false;
 
 XPLMWindowID	debug_window = NULL;
 int				clicked = 0;
@@ -102,8 +100,15 @@ float SmoothSailingCallback(
     setVisibility();
     setCloudBase( alt_agl, alt_msl );
     setWind( alt_agl, alt_msl );
+    setTurbulence();
 
     return CALLBACK_INTERVAL;
+}
+
+void setTurbulence( void ) {
+    /* the tailwind just rockets us op to 0.5 turbulence, not okay */
+    /* i think .01 is the min? */
+    XPLMSetDataf( ref_wind_turb0, 0.01 );
 }
 
 void setWind( float alt_agl, float alt_msl ) {
@@ -112,7 +117,7 @@ void setWind( float alt_agl, float alt_msl ) {
     static int transition_steps = 0;
     static float direction_interval, speed_interval, origin_direction, target_direction, origin_speed;
 
-    float heading = XPLMGetDataf( ref_heading );
+    float heading = XPLMGetDataf( ref_heading ), tmp_direction;
 
     /* wind alt should always be the plane's alt */
     XPLMSetDataf( ref_wind_altitude, alt_msl );
@@ -154,7 +159,12 @@ void setWind( float alt_agl, float alt_msl ) {
     
         case WIND_STATE_AP:
             /* persistant state - preserve tailwind */
-            forceWind( config_tailwind_speed, floor( OPP_HEADING ) );
+            tmp_direction = floor( OPP_HEADING );
+            
+            /* transition direction if not within tolerance */
+            CHECK_DIRECTION
+
+            forceWind( config_tailwind_speed, target_direction );
 
             if( alt_agl < config_wind_transition_altitude ) {
                 TRANSITION_TO_BT
@@ -192,7 +202,12 @@ void setWind( float alt_agl, float alt_msl ) {
     
         case WIND_STATE_BP:
             /* persistant state - preserve tailwind */
-            forceWind( config_headwind_speed, floor( heading ) );
+            tmp_direction = floor( heading );
+            
+            /* transition direction if not within tolerance */
+            CHECK_DIRECTION
+            
+            forceWind( config_headwind_speed, target_direction );
             
             if( alt_agl < 1 ) {
                 wind_state = WIND_STATE_INITIAL;
@@ -202,34 +217,9 @@ void setWind( float alt_agl, float alt_msl ) {
                 TRANSITION_TO_AT
             }
             break;
+
    }
 
-}
-
-float getHighestCloudAlt(){
-    float cloud_top_alts[3] ={ 
-         XPLMGetDataf( ref_cloud_tops0 )
-        ,XPLMGetDataf( ref_cloud_tops1 )
-        ,XPLMGetDataf( ref_cloud_tops2 )
-    };
-
-    int cloud_types[3] = {
-         XPLMGetDatai( ref_cloud_type0 )
-        ,XPLMGetDatai( ref_cloud_type1 )
-        ,XPLMGetDatai( ref_cloud_type2 )
-    };
-
-    int i;
-
-    float highest = 0;
-
-    for( i=0; i<3; i++ ) {
-        if( cloud_types[i] && cloud_top_alts[i] > highest ) {
-            highest = cloud_top_alts[i];
-        }
-    }
-
-    return highest;
 }
 
 void forceWind( float speed, float dir ) {
@@ -254,7 +244,8 @@ void setCloudBase( float alt_agl, float alt_msl ) {
      * then apply that difference to all cloud layers */
     float delta = config_min_cloud_base - cloud_base_agl;
 
-    if( delta > 0 ) {
+    /* only set clouds if they're above the plane */
+    if( cloud_base_msl > alt_msl && delta > 0 ) {
         XPLMSetDataf( ref_cloud_base0, cloud_base_msl + delta );
         XPLMSetDataf( ref_cloud_tops0, XPLMGetDataf( ref_cloud_tops0 ) + delta );
 
@@ -333,10 +324,6 @@ PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc) {
     ref_cloud_tops1     = XPLMFindDataRef("sim/weather/cloud_tops_msl_m[1]");
     ref_cloud_tops2     = XPLMFindDataRef("sim/weather/cloud_tops_msl_m[2]");
 
-    ref_cloud_type0     = XPLMFindDataRef("sim/weather/cloud_type[0]");
-    ref_cloud_type1     = XPLMFindDataRef("sim/weather/cloud_type[1]");
-    ref_cloud_type2     = XPLMFindDataRef("sim/weather/cloud_type[2]");
-
     ref_alt_msl         = XPLMFindDataRef("sim/flightmodel/position/elevation");
 
     /* datarefs for setting time */
@@ -354,6 +341,7 @@ PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc) {
     ref_wind_direction1 = XPLMFindDataRef("sim/weather/wind_direction_degt[1]");
     ref_wind_direction2 = XPLMFindDataRef("sim/weather/wind_direction_degt[2]");
     ref_wind_altitude   = XPLMFindDataRef("sim/weather/wind_altitude_msl_m[0]");
+    ref_wind_turb0      = XPLMFindDataRef("sim/weather/turbulence[0]");
 
 	if( DEBUG ) {
         debug_window = XPLMCreateWindow(

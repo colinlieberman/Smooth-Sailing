@@ -17,6 +17,7 @@ using namespace std;
 
 #include <string.h>
 #include <math.h>
+#include <cmath>
 
 #define DEBUG 0
 #define CALLBACK_INTERVAL -1
@@ -78,6 +79,25 @@ using namespace std;
                 transition_steps    = 0; \
     }
 
+#define CHECK_DIRECTION { \
+            if( change_p_dir ) { \
+                /* change by a 10th of a degree at a time until close enough */ \
+                if( abs( tmp_direction - target_direction ) > 1 ) { \
+                    target_direction += ( tmp_direction > target_direction ) \
+                                            ? 0.1 \
+                                            : -0.1; \
+                }  \
+                else { \
+                    change_p_dir = false; \
+                } \
+            } \
+            else if( abs( tmp_direction - target_direction ) > WIND_ANGLE_MAX ) { \
+                change_p_dir = true; \
+            } \
+    }
+
+#define WIND_ANGLE_MAX 30
+
 void initXpndr( void );
 void initConfig( void );
 void setVisibility( void );
@@ -86,4 +106,5 @@ void setWind( float, float );
 void resetTime( void );
 void forceWind( float, float );
 float getHighestCloudAlt( void );
+void setTurbulence( void );
 
