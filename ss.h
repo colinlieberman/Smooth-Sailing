@@ -85,6 +85,5 @@ void setCloudBase( float, float );
 void setWind( float, float );
 void resetTime( void );
 void forceWind( float, float );
-void setTurbulence( float );
 float getHighestCloudAlt( void );
 

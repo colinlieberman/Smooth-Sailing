@@ -34,10 +34,6 @@ XPLMDataRef ref_wind_direction0 = NULL;
 XPLMDataRef ref_wind_direction1 = NULL;
 XPLMDataRef ref_wind_direction2 = NULL;
 
-XPLMDataRef ref_wind_turb0      = NULL;
-XPLMDataRef ref_wind_turb1      = NULL;
-XPLMDataRef ref_wind_turb2      = NULL;
-
 XPLMDataRef ref_wind_altitude   = NULL;
 
 /* time is being weird - it looks like I have to set it during the callback for it to get 
@@ -61,9 +57,6 @@ extern int config_time_push_forward_seconds;
 extern float config_wind_transition_altitude;
 extern float config_tailwind_speed;
 extern float config_headwind_speed;
-extern float config_max_turbulence_below;
-extern float config_max_turbulence_above;
-extern float config_max_turbulence_clear;
 
 char debug_string[255];
 
@@ -109,7 +102,6 @@ float SmoothSailingCallback(
     setVisibility();
     setCloudBase( alt_agl, alt_msl );
     setWind( alt_agl, alt_msl );
-    setTurbulence( alt_msl );
 
     return CALLBACK_INTERVAL;
 }
@@ -162,7 +154,7 @@ void setWind( float alt_agl, float alt_msl ) {
     
         case WIND_STATE_AP:
             /* persistant state - preserve tailwind */
-            forceWind( config_tailwind_speed, OPP_HEADING );
+            forceWind( config_tailwind_speed, floor( OPP_HEADING ) );
 
             if( alt_agl < config_wind_transition_altitude ) {
                 TRANSITION_TO_BT
@@ -200,7 +192,7 @@ void setWind( float alt_agl, float alt_msl ) {
     
         case WIND_STATE_BP:
             /* persistant state - preserve tailwind */
-            forceWind( config_headwind_speed, heading );
+            forceWind( config_headwind_speed, floor( heading ) );
             
             if( alt_agl < 1 ) {
                 wind_state = WIND_STATE_INITIAL;
@@ -238,41 +230,6 @@ float getHighestCloudAlt(){
     }
 
     return highest;
-}
-
-void setTurbulence( float alt_msl ) {
-
-    /* turbulence is funny - when I hack the wind, it seems to want to crank up the 
-     * turbulence (maybe it's calculating it based on wind changes? 
-     *
-     * need to smoothe that out. also, i don't really want any turbulence
-     * if you're over the highest cloud layer */
-
-    float highest_cloud_alt = getHighestCloudAlt();
-  
-    float max_turbulence = config_max_turbulence_below;
-
-    /* if highest_cloud_alt is 0, then some turb is ok at any altitude */
-    if( highest_cloud_alt && alt_msl > highest_cloud_alt ) {
-        /* minimum is probably nicer than 0 */
-        max_turbulence = config_max_turbulence_above;
-    }
-    /* if highest_cloud_alt is 0, let's use a very small, but not minimal turb */
-    else if ( !highest_cloud_alt ) {
-        max_turbulence = config_max_turbulence_clear;
-    }
-    
-    if( XPLMGetDataf( ref_wind_turb0 ) > max_turbulence ) {
-        XPLMSetDataf( ref_wind_turb0, max_turbulence );
-    }
-    
-    if( XPLMGetDataf( ref_wind_turb1 ) > max_turbulence ) {
-        XPLMSetDataf( ref_wind_turb1, max_turbulence );
-    }
-    
-    if( XPLMGetDataf( ref_wind_turb2 ) > max_turbulence ) {
-        XPLMSetDataf( ref_wind_turb2, max_turbulence );
-    }
 }
 
 void forceWind( float speed, float dir ) {
@@ -396,9 +353,6 @@ PLUGIN_API int XPluginStart(char *outName, char *outSig, char *outDesc) {
     ref_wind_direction0 = XPLMFindDataRef("sim/weather/wind_direction_degt[0]");
     ref_wind_direction1 = XPLMFindDataRef("sim/weather/wind_direction_degt[1]");
     ref_wind_direction2 = XPLMFindDataRef("sim/weather/wind_direction_degt[2]");
-    ref_wind_turb0      = XPLMFindDataRef("sim/weather/turbulence[0]");
-    ref_wind_turb1      = XPLMFindDataRef("sim/weather/turbulence[1]");
-    ref_wind_turb2      = XPLMFindDataRef("sim/weather/turbulence[2]");
     ref_wind_altitude   = XPLMFindDataRef("sim/weather/wind_altitude_msl_m[0]");
 
 	if( DEBUG ) {

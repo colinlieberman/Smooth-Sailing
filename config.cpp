@@ -18,9 +18,6 @@ int config_time_push_forward_seconds;
 float config_wind_transition_altitude;
 float config_tailwind_speed;
 float config_headwind_speed;
-float config_max_turbulence_below;
-float config_max_turbulence_above;
-float config_max_turbulence_clear;
 
 extern char debug_string[255];
 
@@ -64,11 +61,6 @@ void initConfig() {
 
     config_tailwind_speed = 20;
     config_headwind_speed = 5;
-
-    /* turbulence is 0 to 1, and it seems like units less than .1 are ignored */
-    config_max_turbulence_above = 0.1;
-    config_max_turbulence_below = 0.3;
-    config_max_turbulence_clear = 0.2;
 
     pref_file.open( CONFIG_FILE_PATH );
     if( ! pref_file ) {
@@ -165,27 +157,6 @@ void initConfig() {
     tmpf  = atof( line.c_str() );
     if( tmpf >= 0 && tmpf <= 200 ) {
         config_headwind_speed = tmpf;
-    }
-
-    /* line 54: max turbulence when below clouds */
-    line = lines[ 54 ];
-    tmpf  = atof( line.c_str() );
-    if( tmpf >= 0 && tmpf <= 1 ) {
-        config_max_turbulence_below = tmpf;
-    }
-
-    /* line 57: max turbulence when above clouds */
-    line = lines[ 57 ];
-    tmpf  = atof( line.c_str() );
-    if( tmpf >= 0 && tmpf <= 1 ) {
-        config_max_turbulence_above = tmpf;
-    }
-
-    /* line 60: max turbulence when there are no clouds */
-    line = lines[ 60 ];
-    tmpf  = atof( line.c_str() );
-    if( tmpf >= 0 && tmpf <= 1 ) {
-        config_max_turbulence_clear = tmpf;
     }
     
     return;
