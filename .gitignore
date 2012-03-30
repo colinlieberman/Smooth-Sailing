@@ -1,3 +1,5 @@
 Makefile
 *.pro
 *.pro.user
+*.o
+*.xpl
