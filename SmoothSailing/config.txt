@@ -1,0 +1,51 @@
+## THIS IS THE CONFIG FILE FOR SMOOTH SAILING PLUGIN
+## be sure that you don't change this file so that
+## anything is on the wrong line!
+
+# DEFAULT XPNDR SETTING
+1200
+
+# FORCE VISIBILITY IN METERS: 40km =~ 25 sm
+40000
+
+# MIN CLOUD BASE ALTITUDE IN METERS AGL: 800m =~ 2600 ft
+800
+
+# CONFIGURATIONS FOR CLOCK ADJUSTMENT:
+# MEASURED IN SECONDS SINCE MIDNIGHT
+# eg  1 am = 3600
+#    10 am = 36000
+
+# LATE_TIME_SECONDS
+# time (in seconds since midnight) at which we start rolling back
+# 4pm = 16 hours from midnight = 57600 seconds 
+# use 4pm so there's a good 3 hours or so flight time available 
+57600
+
+# EARLY_TIME_SECONDS
+# similar, but for too early in the morning
+# 6am = 6 hours = 21600 seconds 
+21600
+
+# ROLLBACK_SECONDS
+# the number of seconds to roll back when
+# real time is later than LATE_TIME_SECONDS
+# roll back 10 hours, or 3600 seconds
+36000
+
+# PUSH_FORWARD_SECONDS
+# the number of seconds to push forward when
+# real time is earlier than EARLY_TIME_SECONDS
+# push forward 6 hours, or 21600 seconds
+21600
+
+# WIND_TRANSITION_ALT IN METERS AGL: 800m =~ 2600 ft
+# persistant headwind when you've descended below this alt
+# persistant tailwind when you're above it
+800
+
+# SPEED IN KTS FOR TAILWIND
+20
+
+# SPEED IN KTS FOR HEADWIND
+5

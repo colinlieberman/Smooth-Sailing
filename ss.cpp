@@ -108,7 +108,10 @@ float SmoothSailingCallback(
 void setTurbulence( void ) {
     /* the tailwind just rockets us op to 0.5 turbulence, not okay */
     /* i think .01 is the min? */
-    XPLMSetDataf( ref_wind_turb0, 0.01 );
+    /* TODO: make this configurable */
+    if( XPLMGetDataf( ref_wind_turb0 ) > 0.1 ) {
+        XPLMSetDataf( ref_wind_turb0, 0.1 );
+    }
 }
 
 void setWind( float alt_agl, float alt_msl ) {

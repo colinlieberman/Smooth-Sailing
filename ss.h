@@ -80,6 +80,10 @@ using namespace std;
     }
 
 #define CHECK_DIRECTION { \
+            /* buggy right around 360/0 */\
+            if( tmp_direction >= 359 ) { \
+                tmp_direction -= 3; \
+            } \
             if( change_p_dir ) { \
                 /* change by a 10th of a degree at a time until close enough */ \
                 if( abs( tmp_direction - target_direction ) > 1 ) { \
