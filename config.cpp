@@ -35,7 +35,7 @@ void initConfig() {
     config_visibility_setting    = 40000;
 
     /* in meters - 800m =~ 2600 ft */
-    config_min_cloud_base = 800;
+    config_min_cloud_base = 1500;
 
     /* time reset - time is measured in seconds since midnight -
      * config_late_time_seconds is the time (in seconds since midnight) at which we start rolling back

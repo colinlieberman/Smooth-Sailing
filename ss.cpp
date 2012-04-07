@@ -243,12 +243,16 @@ void setCloudBase( float alt_agl, float alt_msl ) {
     float ground_level   = alt_msl - alt_agl;
     float cloud_base_agl = cloud_base_msl - ground_level;
 
+    float cloud_tops_msl = XPLMGetDataf( ref_cloud_tops0 );
+
     /* find the difference betwee the lowest cloud layer and what we want,
      * then apply that difference to all cloud layers */
     float delta = config_min_cloud_base - cloud_base_agl;
 
+    sprintf( debug_string, "min: %f, base %f, detla %f", config_min_cloud_base, cloud_base_agl, delta );
+
     /* only set clouds if they're above the plane */
-    if( cloud_base_msl > alt_msl && delta > 0 ) {
+    if( cloud_tops_msl > alt_msl && ( delta > 0 ) ) {
         XPLMSetDataf( ref_cloud_base0, cloud_base_msl + delta );
         XPLMSetDataf( ref_cloud_tops0, XPLMGetDataf( ref_cloud_tops0 ) + delta );
 
